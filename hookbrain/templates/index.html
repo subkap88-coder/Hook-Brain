@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HookBrain — TRIBE v2 Hook Scanner</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0d0f14;
+    --surface:   #161a23;
+    --border:    #252a36;
+    --muted:     #4a5568;
+    --text:      #e2e8f0;
+    --subtext:   #94a3b8;
+    --accent:    #7c3aed;
+    --accent-lt: #a78bfa;
+    --green:     #10b981;
+    --yellow:    #f59e0b;
+    --red:       #ef4444;
+    --radius:    8px;
+    --mono:      'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  /* ── Layout ─────────────────────────────────────────────────── */
+  header {
+    padding: 20px 32px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+  header h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.5px; }
+  header h1 span { color: var(--accent-lt); }
+  header p { color: var(--subtext); font-size: 13px; }
+
+  .layout { display: flex; gap: 0; min-height: calc(100vh - 61px); }
+
+  .main {
+    flex: 1;
+    padding: 28px 32px;
+    border-right: 1px solid var(--border);
+    min-width: 0;
+  }
+
+  .sidebar {
+    width: 300px;
+    padding: 20px;
+    flex-shrink: 0;
+  }
+
+  /* ── Cards / Sections ───────────────────────────────────────── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  .card-title {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--subtext);
+    margin-bottom: 14px;
+  }
+
+  /* ── Input ──────────────────────────────────────────────────── */
+  textarea {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 14px;
+    padding: 12px;
+    resize: vertical;
+    min-height: 80px;
+    outline: none;
+    transition: border-color .15s;
+  }
+  textarea:focus { border-color: var(--accent); }
+  textarea::placeholder { color: var(--muted); }
+
+  /* ── Buttons ────────────────────────────────────────────────── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 9px 18px;
+    border-radius: var(--radius);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: opacity .15s, transform .1s;
+  }
+  .btn:active { transform: scale(.97); }
+  .btn:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+  .btn-primary  { background: var(--accent);   color: #fff; }
+  .btn-secondary{ background: var(--surface);  color: var(--text); border: 1px solid var(--border); }
+  .btn-green    { background: var(--green);     color: #fff; }
+  .btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+
+  /* ── Status ─────────────────────────────────────────────────── */
+  #scan-status {
+    display: none;
+    align-items: center;
+    gap: 14px;
+    padding: 16px 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 20px;
+  }
+  .spinner {
+    width: 20px; height: 20px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent-lt);
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+    flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .status-text { color: var(--subtext); font-size: 13px; }
+  .status-text strong { color: var(--text); }
+
+  /* ── Viral score banner ─────────────────────────────────────── */
+  .score-banner {
+    display: flex;
+    align-items: center;
+    gap: 28px;
+    padding: 20px 24px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 20px;
+  }
+  .score-big {
+    font-size: 48px;
+    font-weight: 800;
+    font-family: var(--mono);
+    line-height: 1;
+    color: var(--accent-lt);
+  }
+  .score-label { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--subtext); }
+
+  .metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  .metric-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+  }
+  .metric-name  { font-size: 10px; text-transform: uppercase; letter-spacing: .07em; color: var(--subtext); margin-bottom: 4px; }
+  .metric-value { font-size: 22px; font-weight: 700; font-family: var(--mono); }
+  .metric-sub   { font-size: 11px; color: var(--subtext); margin-top: 2px; }
+  .good  { color: var(--green); }
+  .warn  { color: var(--yellow); }
+  .bad   { color: var(--red); }
+
+  /* ── Chart ──────────────────────────────────────────────────── */
+  .chart-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  .chart-legend {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 12px;
+    font-size: 12px;
+    color: var(--subtext);
+  }
+  .legend-dot {
+    display: inline-block;
+    width: 10px; height: 10px;
+    border-radius: 2px;
+    margin-right: 5px;
+    vertical-align: middle;
+  }
+
+  /* ── Per-second table ───────────────────────────────────────── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  th {
+    text-align: left;
+    padding: 8px 10px;
+    color: var(--subtext);
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    border-bottom: 1px solid var(--border);
+  }
+  td {
+    padding: 9px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  tr:last-child td { border-bottom: none; }
+  .hemi-bar {
+    display: flex;
+    height: 6px;
+    border-radius: 3px;
+    overflow: hidden;
+    width: 80px;
+    background: var(--border);
+  }
+  .hemi-left  { background: #3b82f6; }
+  .hemi-right { background: #f97316; }
+
+  /* ── Rewrites ───────────────────────────────────────────────── */
+  .rewrite-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    margin-bottom: 10px;
+  }
+  .rewrite-card:last-child { margin-bottom: 0; }
+  .mechanic-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    margin-bottom: 8px;
+    background: color-mix(in srgb, var(--accent) 20%, transparent);
+    color: var(--accent-lt);
+    border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  }
+  .rewrite-text {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text);
+    margin-bottom: 6px;
+    line-height: 1.5;
+  }
+  .rewrite-why { font-size: 12px; color: var(--subtext); }
+
+  /* ── Comparison table ───────────────────────────────────────── */
+  .comparison-wrap { overflow-x: auto; }
+  .comparison-wrap table { min-width: 700px; }
+  .winner td { background: color-mix(in srgb, var(--green) 8%, transparent); }
+  .baseline-row td { color: var(--subtext); }
+  .scan-progress {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 0;
+    font-size: 13px;
+    color: var(--subtext);
+  }
+  .scan-progress .spinner { width: 14px; height: 14px; }
+  .dot-done  { width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
+  .dot-error { width: 8px; height: 8px; border-radius: 50%; background: var(--red);   flex-shrink: 0; }
+
+  /* ── History ────────────────────────────────────────────────── */
+  .sidebar-title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: var(--subtext);
+    margin-bottom: 12px;
+  }
+  .history-item {
+    padding: 10px 12px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: border-color .15s;
+  }
+  .history-item:hover { border-color: var(--accent); }
+  .history-hook {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 4px;
+  }
+  .history-meta { font-size: 11px; color: var(--subtext); display: flex; justify-content: space-between; }
+  .history-score { font-weight: 700; color: var(--accent-lt); }
+  .empty-history { color: var(--muted); font-size: 13px; }
+
+  /* ── Error ──────────────────────────────────────────────────── */
+  .error-box {
+    background: color-mix(in srgb, var(--red) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--red) 40%, transparent);
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    color: #fca5a5;
+    font-size: 13px;
+    margin-bottom: 20px;
+    font-family: var(--mono);
+  }
+
+  /* ── Hidden ─────────────────────────────────────────────────── */
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Hook<span>Brain</span></h1>
+  <p>TRIBE v2 fMRI scoring for short-form video hooks</p>
+</header>
+
+<div class="layout">
+<div class="main">
+
+  <!-- ── Input ─────────────────────────────────────────────── -->
+  <div class="card">
+    <div class="card-title">Hook Text</div>
+    <textarea id="hook-input" rows="3"
+      placeholder="Paste your hook here..."></textarea>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="scan-btn" onclick="startScan()">
+        &#9654; Scan Hook
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Scan status ───────────────────────────────────────── -->
+  <div id="scan-status">
+    <div class="spinner"></div>
+    <div class="status-text">
+      <strong>Running TRIBE v2</strong> — this takes 3–5 min on CPU.
+      Elapsed: <span id="elapsed">0s</span>
+    </div>
+  </div>
+
+  <!-- ── Error ─────────────────────────────────────────────── -->
+  <div id="error-box" class="error-box hidden"></div>
+
+  <!-- ── Results ───────────────────────────────────────────── -->
+  <div id="results-section" class="hidden">
+
+    <!-- Viral score banner -->
+    <div class="score-banner">
+      <div>
+        <div class="score-label">Viral Score</div>
+        <div class="score-big" id="viral-score-big">—</div>
+      </div>
+      <div style="flex:1">
+        <div style="font-size:13px; color:var(--subtext); margin-bottom:6px" id="score-hook-label"></div>
+        <div style="font-size:12px; color:var(--muted)" id="score-verdict"></div>
+      </div>
+    </div>
+
+    <!-- Metric breakdown -->
+    <div class="metrics-grid" id="metrics-grid"></div>
+
+    <!-- Chart -->
+    <div class="chart-wrap">
+      <div class="card-title">Brain Activation Per Second</div>
+      <div class="chart-legend">
+        <span><span class="legend-dot" style="background:#3b82f6"></span>Left hemisphere</span>
+        <span><span class="legend-dot" style="background:#f97316"></span>Right hemisphere</span>
+        <span><span class="legend-dot" style="background:#7c3aed"></span>Overall mean</span>
+      </div>
+      <canvas id="brain-chart" height="120"></canvas>
+    </div>
+
+    <!-- Per-second table -->
+    <div class="card">
+      <div class="card-title">Second-by-Second Breakdown</div>
+      <table id="seconds-table">
+        <thead>
+          <tr>
+            <th>t</th>
+            <th>Mean</th>
+            <th>Max</th>
+            <th>Top100</th>
+            <th>Left%</th>
+            <th>L vs R</th>
+            <th>Signal</th>
+          </tr>
+        </thead>
+        <tbody id="seconds-tbody"></tbody>
+      </table>
+    </div>
+
+    <!-- Generate rewrites button -->
+    <div class="btn-row">
+      <button class="btn btn-secondary" id="rewrites-btn" onclick="generateRewrites()">
+        ✦ Generate Rewrites via Claude
+      </button>
+    </div>
+
+  </div><!-- /results-section -->
+
+  <!-- ── Rewrites ──────────────────────────────────────────── -->
+  <div id="rewrites-section" class="hidden" style="margin-top:20px">
+    <div class="card">
+      <div class="card-title">Claude Rewrites — 5 Viral Mechanics</div>
+      <div id="rewrites-list"></div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-green" id="scan-all-btn" onclick="scanAllRewrites()">
+        &#9654; Scan All Rewrites
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Comparison ────────────────────────────────────────── -->
+  <div id="comparison-section" class="hidden" style="margin-top:20px">
+    <div class="card">
+      <div class="card-title">Comparison — Rewrites vs. Baseline</div>
+      <div id="rewrite-progress"></div>
+      <div class="comparison-wrap hidden" id="comparison-table-wrap">
+        <table id="comparison-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Hook</th>
+              <th>Mechanic</th>
+              <th>Watch</th>
+              <th>E.Onset</th>
+              <th>R.Dom%</th>
+              <th>Drop%</th>
+              <th>Sustained</th>
+              <th>Viral ▼</th>
+            </tr>
+          </thead>
+          <tbody id="comparison-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /main -->
+
+<!-- ── Sidebar ─────────────────────────────────────────────────── -->
+<div class="sidebar">
+  <div class="sidebar-title">History</div>
+  <div id="history-list">
+    <div class="empty-history">No scans yet.</div>
+  </div>
+</div>
+
+</div><!-- /layout -->
+
+<script>
+// ─────────────────────────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────────────────────────
+let currentJobId   = null;
+let currentResult  = null;   // { hook, seconds, viral, scan_id }
+let rewriteList    = [];     // [{ mechanic, hook, why }]
+let rewriteJobs    = [];     // [{ job_id, mechanic, hook }]
+let pollTimer      = null;
+let elapsedTimer   = null;
+let elapsedSec     = 0;
+let brainChart     = null;
+let rewritePollTimer = null;
+
+// ─────────────────────────────────────────────────────────────────
+// Scan
+// ─────────────────────────────────────────────────────────────────
+async function startScan() {
+  const hookText = document.getElementById('hook-input').value.trim();
+  if (!hookText) return;
+
+  resetResults();
+
+  document.getElementById('scan-btn').disabled   = true;
+  document.getElementById('hook-input').disabled = true;
+  document.getElementById('scan-status').style.display = 'flex';
+  hide('error-box');
+
+  elapsedSec = 0;
+  document.getElementById('elapsed').textContent = '0s';
+  elapsedTimer = setInterval(() => {
+    elapsedSec++;
+    document.getElementById('elapsed').textContent =
+      elapsedSec >= 60 ? `${Math.floor(elapsedSec/60)}m ${elapsedSec%60}s` : `${elapsedSec}s`;
+  }, 1000);
+
+  try {
+    const res  = await post('/api/scan', { hook: hookText });
+    currentJobId = res.job_id;
+    pollTimer    = setInterval(pollScan, 3000);
+  } catch(e) {
+    showError('Failed to start scan: ' + e.message);
+    resetScanUI();
+  }
+}
+
+async function pollScan() {
+  try {
+    const job = await get(`/api/scan/${currentJobId}`);
+    if (job.status === 'done') {
+      clearInterval(pollTimer);
+      clearInterval(elapsedTimer);
+      currentResult = job.result;
+      renderResults(currentResult);
+      resetScanUI();
+      loadHistory();
+    } else if (job.status === 'error') {
+      clearInterval(pollTimer);
+      clearInterval(elapsedTimer);
+      showError(job.error || 'Unknown error');
+      resetScanUI();
+    }
+  } catch(e) {
+    // transient network error — keep polling
+  }
+}
+
+function resetScanUI() {
+  document.getElementById('scan-btn').disabled   = false;
+  document.getElementById('hook-input').disabled = false;
+  document.getElementById('scan-status').style.display = 'none';
+}
+
+function resetResults() {
+  hide('results-section');
+  hide('rewrites-section');
+  hide('comparison-section');
+  rewriteList = [];
+  rewriteJobs = [];
+  currentResult = null;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Render results
+// ─────────────────────────────────────────────────────────────────
+function renderResults(data) {
+  const v = data.viral;
+
+  // Score banner
+  document.getElementById('viral-score-big').textContent = v.viral_score.toFixed(2);
+  document.getElementById('score-hook-label').textContent =
+    '"' + (data.hook.length > 80 ? data.hook.slice(0, 80) + '…' : data.hook) + '"';
+  document.getElementById('score-verdict').textContent = scoreVerdict(v.viral_score);
+
+  // Metric cards
+  const metrics = [
+    { name: 'Watch Signal',    value: v.watch_signal.toFixed(4),   sub: 't0+t1 mean',      cls: colorActivation(v.watch_signal) },
+    { name: 'Emot. Onset',    value: v.emotional_onset.toFixed(4), sub: 't0 top100',        cls: colorActivation(v.emotional_onset, 0.3) },
+    { name: 'Right Dom %',    value: v.right_dom_t0.toFixed(1)+'%',sub: 't0 right hemi',   cls: colorRightDom(v.right_dom_t0) },
+    { name: 'Drop-off Risk',  value: v.dropoff_risk.toFixed(1)+'%',sub: 't3 left%',        cls: colorDropoff(v.dropoff_risk) },
+    { name: 'Sustained',      value: v.mean_sustained.toFixed(4),  sub: 'avg all seconds',  cls: colorActivation(v.mean_sustained) },
+  ];
+  document.getElementById('metrics-grid').innerHTML = metrics.map(m => `
+    <div class="metric-card">
+      <div class="metric-name">${m.name}</div>
+      <div class="metric-value ${m.cls}">${m.value}</div>
+      <div class="metric-sub">${m.sub}</div>
+    </div>
+  `).join('');
+
+  // Chart
+  renderChart(data.seconds);
+
+  // Table
+  const tbody = document.getElementById('seconds-tbody');
+  tbody.innerHTML = data.seconds.map(s => {
+    const leftPct  = s.top100_left_pct;
+    const rightPct = 100 - leftPct;
+    const sig      = hemisphereSignal(leftPct);
+    return `<tr>
+      <td>${s.t}</td>
+      <td class="${colorActivation(s.mean)}">${s.mean.toFixed(4)}</td>
+      <td>${s.max.toFixed(4)}</td>
+      <td>${s.top100_mean.toFixed(4)}</td>
+      <td class="${colorDropoff(leftPct)}">${leftPct}%</td>
+      <td>
+        <div class="hemi-bar">
+          <div class="hemi-left"  style="width:${leftPct}%"></div>
+          <div class="hemi-right" style="width:${rightPct}%"></div>
+        </div>
+      </td>
+      <td style="font-size:11px">${sig}</td>
+    </tr>`;
+  }).join('');
+
+  show('results-section');
+}
+
+function renderChart(seconds) {
+  const labels = seconds.map(s => `t=${s.t}`);
+  const leftData  = seconds.map(s => s.left_mean);
+  const rightData = seconds.map(s => s.right_mean);
+  const meanData  = seconds.map(s => s.mean);
+
+  if (brainChart) brainChart.destroy();
+  const ctx = document.getElementById('brain-chart').getContext('2d');
+  brainChart = new Chart(ctx, {
+    data: {
+      labels,
+      datasets: [
+        {
+          type: 'bar',
+          label: 'Left mean',
+          data: leftData,
+          backgroundColor: 'rgba(59, 130, 246, 0.6)',
+          borderColor:     'rgba(59, 130, 246, 0.9)',
+          borderWidth: 1,
+        },
+        {
+          type: 'bar',
+          label: 'Right mean',
+          data: rightData,
+          backgroundColor: 'rgba(249, 115, 22, 0.6)',
+          borderColor:     'rgba(249, 115, 22, 0.9)',
+          borderWidth: 1,
+        },
+        {
+          type: 'line',
+          label: 'Overall mean',
+          data: meanData,
+          borderColor:     'rgba(124, 58, 237, 0.9)',
+          backgroundColor: 'rgba(124, 58, 237, 0.1)',
+          pointBackgroundColor: 'rgba(124, 58, 237, 1)',
+          pointRadius: 4,
+          borderWidth: 2,
+          tension: 0.3,
+          fill: false,
+          yAxisID: 'y',
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8' } },
+        y: {
+          grid: { color: 'rgba(255,255,255,0.05)' },
+          ticks: { color: '#94a3b8' },
+          title: { display: true, text: 'Activation', color: '#94a3b8', font: { size: 11 } },
+        },
+      },
+      plugins: {
+        legend: {
+          labels: { color: '#94a3b8', font: { size: 11 }, boxWidth: 12 },
+        },
+        tooltip: {
+          backgroundColor: '#1e2330',
+          borderColor: '#252a36',
+          borderWidth: 1,
+          titleColor: '#e2e8f0',
+          bodyColor: '#94a3b8',
+          callbacks: {
+            afterBody: (items) => {
+              const i = items[0].dataIndex;
+              const s = seconds[i];
+              return [
+                `Top100 mean: ${s.top100_mean}`,
+                `Left%: ${s.top100_left_pct}%  Right%: ${100 - s.top100_left_pct}%`,
+              ];
+            }
+          }
+        },
+      },
+    },
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Rewrites
+// ─────────────────────────────────────────────────────────────────
+async function generateRewrites() {
+  if (!currentResult) return;
+  const btn = document.getElementById('rewrites-btn');
+  btn.disabled = true;
+  btn.textContent = '⟳ Asking Claude…';
+
+  hide('rewrites-section');
+
+  try {
+    const res = await post('/api/rewrites', {
+      hook:       currentResult.hook,
+      brain_data: { seconds: currentResult.seconds, viral: currentResult.viral },
+      scan_id:    currentResult.scan_id,
+    });
+    rewriteList = res.rewrites;
+    renderRewrites(rewriteList);
+    show('rewrites-section');
+  } catch(e) {
+    showError('Rewrite generation failed: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '✦ Generate Rewrites via Claude';
+  }
+}
+
+function renderRewrites(rewrites) {
+  const MECH_LABELS = {
+    watch_signal:      'Watch Signal',
+    self_relevance:    'Self-Relevance',
+    emotional_salience:'Emotional Salience',
+    share_signal:      'Share Signal',
+    dropoff_prevention:'Drop-off Prevention',
+  };
+  document.getElementById('rewrites-list').innerHTML = rewrites.map((r, i) => `
+    <div class="rewrite-card">
+      <div class="mechanic-badge">${MECH_LABELS[r.mechanic] || r.mechanic}</div>
+      <div class="rewrite-text">${escHtml(r.hook)}</div>
+      <div class="rewrite-why">${escHtml(r.why)}</div>
+    </div>
+  `).join('');
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Scan all rewrites
+// ─────────────────────────────────────────────────────────────────
+async function scanAllRewrites() {
+  if (!rewriteList.length || !currentResult) return;
+  document.getElementById('scan-all-btn').disabled = true;
+
+  show('comparison-section');
+  hide('comparison-table-wrap');
+
+  try {
+    const res = await post('/api/scan_rewrites', {
+      rewrites: rewriteList,
+      scan_id:  currentResult.scan_id,
+    });
+    rewriteJobs = res.jobs;
+    renderRewriteProgress(rewriteJobs);
+    rewritePollTimer = setInterval(pollRewriteJobs, 4000);
+  } catch(e) {
+    showError('Failed to start rewrite scans: ' + e.message);
+  }
+}
+
+function renderRewriteProgress(jobs) {
+  document.getElementById('rewrite-progress').innerHTML = jobs.map(j => `
+    <div class="scan-progress" id="rp-${j.job_id}">
+      <div class="spinner"></div>
+      <span>${escHtml(j.mechanic)}: <em>${escHtml(j.hook.slice(0, 60))}…</em></span>
+    </div>
+  `).join('');
+}
+
+async function pollRewriteJobs() {
+  let allDone = true;
+  const results = [];
+
+  for (const j of rewriteJobs) {
+    try {
+      const job = await get(`/api/scan/${j.job_id}`);
+      const el  = document.getElementById(`rp-${j.job_id}`);
+      if (job.status === 'done') {
+        if (el) el.innerHTML = `<div class="dot-done"></div><span style="color:var(--subtext)">${escHtml(j.mechanic)}</span>`;
+        results.push({ ...j, result: job.result });
+      } else if (job.status === 'error') {
+        if (el) el.innerHTML = `<div class="dot-error"></div><span style="color:var(--red)">${escHtml(j.mechanic)}: error</span>`;
+        results.push({ ...j, result: null, error: job.error });
+      } else {
+        allDone = false;
+        results.push({ ...j, result: null });
+      }
+    } catch(e) {
+      allDone = false;
+    }
+  }
+
+  if (allDone) {
+    clearInterval(rewritePollTimer);
+    renderComparisonTable(results);
+    loadHistory();
+  }
+}
+
+function renderComparisonTable(jobs) {
+  const rows = [];
+
+  // Baseline row
+  if (currentResult) {
+    rows.push({
+      hook:      currentResult.hook,
+      mechanic:  'baseline',
+      viral:     currentResult.viral,
+      isBaseline: true,
+    });
+  }
+
+  for (const j of jobs) {
+    if (j.result) {
+      rows.push({
+        hook:     j.hook,
+        mechanic: j.mechanic,
+        viral:    j.result.viral,
+      });
+    }
+  }
+
+  // Sort by viral score desc
+  rows.sort((a, b) => b.viral.viral_score - a.viral.viral_score);
+
+  const tbody = document.getElementById('comparison-tbody');
+  tbody.innerHTML = rows.map((r, i) => {
+    const v       = r.viral;
+    const isWin   = i === 0 && !r.isBaseline;
+    const trClass = r.isBaseline ? 'baseline-row' : (isWin ? 'winner' : '');
+    const rank    = r.isBaseline ? '—' : (i === 0 ? '🥇' : i + 1);
+    return `<tr class="${trClass}">
+      <td>${rank}</td>
+      <td style="font-family:var(--mono);font-size:12px;max-width:240px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(r.hook)}</td>
+      <td style="font-size:11px;color:var(--subtext)">${r.mechanic}</td>
+      <td class="${colorActivation(v.watch_signal)}">${v.watch_signal.toFixed(4)}</td>
+      <td>${v.emotional_onset.toFixed(4)}</td>
+      <td class="${colorRightDom(v.right_dom_t0)}">${v.right_dom_t0.toFixed(1)}%</td>
+      <td class="${colorDropoff(v.dropoff_risk)}">${v.dropoff_risk.toFixed(1)}%</td>
+      <td>${v.mean_sustained.toFixed(4)}</td>
+      <td style="font-weight:700;color:var(--accent-lt)">${v.viral_score.toFixed(3)}</td>
+    </tr>`;
+  }).join('');
+
+  show('comparison-table-wrap');
+}
+
+// ─────────────────────────────────────────────────────────────────
+// History
+// ─────────────────────────────────────────────────────────────────
+async function loadHistory() {
+  try {
+    const res  = await get('/api/history');
+    const list = document.getElementById('history-list');
+    const items = res.history.filter(h => !h.parent_scan_id); // top-level only
+    if (!items.length) {
+      list.innerHTML = '<div class="empty-history">No scans yet.</div>';
+      return;
+    }
+    list.innerHTML = items.map(h => `
+      <div class="history-item" onclick="loadHistoryScan(${h.id})">
+        <div class="history-hook">${escHtml(h.hook_text)}</div>
+        <div class="history-meta">
+          <span>${new Date(h.created_at).toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</span>
+          <span class="history-score">${h.viral_score != null ? h.viral_score.toFixed(2) : '—'}</span>
+        </div>
+      </div>
+    `).join('');
+  } catch(e) { /* ignore */ }
+}
+
+async function loadHistoryScan(scanId) {
+  try {
+    const data = await get(`/api/history/${scanId}`);
+    document.getElementById('hook-input').value = data.hook_text;
+    resetResults();
+    currentResult = { ...data.brain_data, scan_id: data.id };
+    renderResults(currentResult);
+  } catch(e) {
+    showError('Failed to load scan: ' + e.message);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────
+async function get(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+async function post(url, body) {
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+  return j;
+}
+
+function show(id) { document.getElementById(id).classList.remove('hidden'); }
+function hide(id) { document.getElementById(id).classList.add('hidden'); }
+
+function showError(msg) {
+  const el = document.getElementById('error-box');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+
+function colorActivation(v, threshold=0) {
+  if (v > threshold) return 'good';
+  if (v > threshold - 0.01) return 'warn';
+  return 'bad';
+}
+
+function colorRightDom(pct) {
+  if (pct >= 55) return 'good';
+  if (pct >= 45) return 'warn';
+  return 'bad';
+}
+
+function colorDropoff(pct) {
+  // For drop-off risk: LOW is good, HIGH is bad
+  if (pct <= 45) return 'good';
+  if (pct <= 55) return 'warn';
+  return 'bad';
+}
+
+function hemisphereSignal(leftPct) {
+  if (leftPct >= 65) return '⚠ DROP-OFF';
+  if (leftPct >= 55) return '→ Analytical';
+  if (leftPct >= 45) return '↔ Bilateral';
+  if (leftPct >= 35) return '✓ Emotional';
+  return '✓✓ Strong R';
+}
+
+function scoreVerdict(score) {
+  if (score >= 3.5) return 'Strong viral potential — high emotional engagement';
+  if (score >= 2.5) return 'Moderate potential — some drop-off risk';
+  if (score >= 1.5) return 'Weak hook — brain disengages early';
+  return 'Poor hook — net-negative brain activation';
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Init
+// ─────────────────────────────────────────────────────────────────
+loadHistory();
+</script>
+</body>
+</html>
